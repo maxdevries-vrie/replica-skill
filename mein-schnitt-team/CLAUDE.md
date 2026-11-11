@@ -55,3 +55,7 @@ werkzeuge/hf render "$PWD/videos/<name>/hf" --quality delivery --output "$PWD/vi
 - Vor jeder Änderung an einem bestehenden `hf/`-Projekt: `werkzeuge/hf timeline "$PWD/videos/<name>/hf" --json` lesen. Handänderungen des Nutzers nicht überschreiben. Wird `untertitel.py` neu ausgeführt, vorher fragen.
 - Mehrere Rohdateien: zuerst in Aufnahmereihenfolge zu `arbeit/roh-gesamt.mp4` zusammenfügen (neu encodieren) und damit weiterarbeiten. Die Originale bleiben unberührt.
 - Der Testclip unter `test/` ist die Referenz, ob die Kette funktioniert.
+- **iPhone-Aufnahmen sind HDR (HLG).** `schneiden.py` erkennt das und rechnet nach SDR um (`--npl 100` ist abgestimmt; höher = dunkler).
+- Untertitel-Höhe pro Video an das Gesicht anpassen: `untertitel.py --unten <px>` (Standard 640, bei IMG_6548 590–600, damit sie unter dem Kinn sitzen). Immer per Snapshot prüfen.
+- Ohne Skript: aus dem Transkript ein bereinigtes `skript.txt` schreiben (Satzzeichen, „€“ statt „Euro“, Beträge und Schlüsselwörter in *Sternchen*). Unsichere Wörter mit `medium` gegenprüfen und dem Nutzer zeigen. Das Skript gilt dann als Wahrheit für den Untertiteltext.
+- Rohvideos aus Google Drive: Der Connector lädt nur bis 10 MB. Größere Dateien stellt der Nutzer kurz auf „Jeder mit dem Link“, dann `curl -L "https://drive.usercontent.google.com/download?id=<ID>&export=download&confirm=t"`. Danach daran erinnern, die Freigabe zurückzusetzen.

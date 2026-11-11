@@ -30,34 +30,67 @@ PAUSE_BRUCH = 0.15
 FARBE_BETONUNG = "#FFD60A"
 
 
+EINHEITEN = {"€", "%", "$", "Euro", "Prozent"}
+
+
 def skript_woerter(text):
+    """Skript in Wörter; eine Einheit (€, %) hängt am Zahlwort davor ("300 €" = ein Wort)."""
     raus = []
     for roh in text.split():
         betont = "*" in roh
         wort = roh.replace("*", "")
-        if norm(wort):
+        if wort.strip(".,!?:;") in EINHEITEN and raus:
+            raus[-1]["text"] += "\u00a0" + wort  # geschütztes Leerzeichen: nie umbrechen
+            raus[-1]["betont"] = raus[-1]["betont"] or betont
+            continue
+        if norm(wort) or wort in EINHEITEN:
             raus.append({"text": wort, "betont": betont})
     return raus
 
 
+def _verteilen(sw, t0, t1):
+    """Skriptwörter ohne sichere Zeit gleichmäßig (nach Länge) auf [t0, t1] verteilen."""
+    t1 = max(t1, t0 + 0.12 * len(sw))
+    laengen = [max(2, len(w["text"])) for w in sw]
+    gesamt, t, raus = sum(laengen), t0, []
+    for w, l in zip(sw, laengen):
+        d = (t1 - t0) * l / gesamt
+        raus.append({"text": w["text"], "betont": w["betont"], "start": t, "end": t + d, "geschaetzt": True})
+        t += d
+    return raus
+
+
 def korrigieren(woerter, skript):
-    """Transkriptwörter bekommen die Schreibweise aus dem Skript (Zeit bleibt vom Transkript)."""
-    for w in woerter:
-        w["betont"] = False
+    """Mit Skript gilt der Skripttext vollständig: sicher erkannte Wörter (unscharfe LCS) behalten
+    ihre Zeit, alles dazwischen wird durch die Skriptwörter ersetzt und zeitlich verteilt."""
     if not skript:
+        for w in woerter:
+            w["betont"] = False
         return woerter
+    # "Euro"/"€" als eigenes Transkriptwort an die Zahl davor hängen
+    T = []
+    for w in woerter:
+        if w["text"].strip(".,!?") in EINHEITEN and T:
+            T[-1]["end"] = w["end"]
+            continue
+        T.append(dict(w))
     S = skript_woerter(skript)
-    paare = lcs_paare([w["text"] for w in woerter], [s["text"] for s in S])
-    for i, j in paare:
-        woerter[i]["text"] = S[j]["text"]
-        woerter[i]["betont"] = S[j]["betont"]
-    # Wörter zwischen zwei Treffern, die gleich viele Skriptwörter überspannen -> 1:1 ersetzen
-    for (i0, j0), (i1, j1) in zip(paare, paare[1:]):
-        if i1 - i0 == j1 - j0 and i1 - i0 > 1:
-            for k in range(1, i1 - i0):
-                woerter[i0 + k]["text"] = S[j0 + k]["text"]
-                woerter[i0 + k]["betont"] = S[j0 + k]["betont"]
-    return woerter
+    paare = lcs_paare([w["text"] for w in T], [s["text"] for s in S])
+    raus = []
+    vor_i, vor_j = -1, -1
+    for i, j in paare + [(len(T), len(S))]:
+        luecke_s = S[vor_j + 1:j]
+        if luecke_s:
+            t0 = T[vor_i]["end"] if vor_i >= 0 else (T[0]["start"] if T else 0.0)
+            t1 = T[i]["start"] if i < len(T) else (T[-1]["end"] if T else t0 + 0.5)
+            if vor_i + 1 < i:  # es gab Transkriptwörter in der Lücke -> deren Spanne nehmen
+                t0, t1 = T[vor_i + 1]["start"], T[i - 1]["end"]
+            raus += _verteilen(luecke_s, t0, t1)
+        if i < len(T):
+            raus.append({"text": S[j]["text"], "betont": S[j]["betont"], "start": T[i]["start"], "end": T[i]["end"]})
+        vor_i, vor_j = i, j
+    raus.sort(key=lambda w: w["start"])
+    return raus
 
 
 def zeiten_glaetten(woerter, luecken, total):
@@ -78,14 +111,27 @@ def gruppieren(woerter):
         akt.append(w)
         text = " ".join(x["text"] for x in akt)
         naechstes = woerter[n + 1] if n + 1 < len(woerter) else None
-        bruch = (naechstes is None or w["text"][-1:] in ".!?…:" or len(akt) >= MAX_WOERTER
+        satzende_passt = (naechstes is not None and naechstes["text"][-1:] in ".!?…"
+                          and len(akt) < MAX_WOERTER + 1 and len(text) + 1 + len(naechstes["text"]) <= MAX_ZEICHEN + 7)
+        bruch = (naechstes is None or w["text"][-1:] in ".!?…:"
                  or naechstes["start"] - w["end"] >= PAUSE_BRUCH
                  or (w["text"][-1:] == "," and len(akt) >= 2)
-                 or len(text) + 1 + len(naechstes["text"]) > MAX_ZEICHEN)
+                 or (not satzende_passt and (len(akt) >= MAX_WOERTER
+                                             or len(text) + 1 + len(naechstes["text"]) > MAX_ZEICHEN)))
         if bruch:
             gruppen.append(akt)
             akt = []
-    return gruppen
+    # Einzelnes Mini-Wort ("und", "es") an die nächste Zeile hängen
+    fertig, n = [], 0
+    while n < len(gruppen):
+        g = gruppen[n]
+        if (len(g) == 1 and len(g[0]["text"]) <= 4 and g[0]["text"][-1:] not in ".!?" and n + 1 < len(gruppen)
+                and len(gruppen[n + 1]) < MAX_WOERTER):
+            gruppen[n + 1] = g + gruppen[n + 1]
+        else:
+            fertig.append(g)
+        n += 1
+    return fertig
 
 
 def zeitplan(gruppen, total):
@@ -107,7 +153,7 @@ def wort_html(w):
     return f'<span class="b">{t}</span>' if w["betont"] else t
 
 
-def untertitel_html(plan):
+def untertitel_html(plan, unten=640):
     gruppen_html, js = [], []
     for n, g in enumerate(plan):
         text = " ".join(wort_html(w) for w in g["woerter"])
@@ -116,7 +162,7 @@ def untertitel_html(plan):
     return f"""<template>
   <style>
     #root {{ position: absolute; inset: 0; }}
-    .ut {{ position: absolute; left: 0; right: 0; bottom: 640px; padding: 0 90px;
+    .ut {{ position: absolute; left: 0; right: 0; bottom: {unten}px; padding: 0 90px;
           text-align: center; overflow: visible; opacity: 0; visibility: hidden; }}
     .ut-t {{ display: inline-block; font-family: Montserrat; font-weight: 900;
             font-size: 84px; line-height: 1.08; color: #fff; letter-spacing: -0.5px;
@@ -231,6 +277,7 @@ def main():
     ap.add_argument("--titel")
     ap.add_argument("--titel-dauer", type=float, default=2.6)
     ap.add_argument("--broll-plan")
+    ap.add_argument("--unten", type=int, default=640, help="Abstand Untertitel zum unteren Rand in px")
     a = ap.parse_args()
 
     proj = Path(a.projekt)
@@ -245,7 +292,7 @@ def main():
     woerter = korrigieren(woerter, skript)
     woerter = zeiten_glaetten(woerter, stille(a.schnitt, "-35dB", 0.1), total)
     plan = zeitplan(gruppieren(woerter), total)
-    (proj / "compositions" / "untertitel.html").write_text(untertitel_html(plan), encoding="utf-8")
+    (proj / "compositions" / "untertitel.html").write_text(untertitel_html(plan, a.unten), encoding="utf-8")
 
     hosts = []
     if a.broll_plan:

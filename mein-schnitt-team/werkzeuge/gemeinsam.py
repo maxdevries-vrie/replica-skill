@@ -99,7 +99,14 @@ def stille(pfad, noise="-35dB", mindauer=0.25):
             start = None
     if start is not None:
         luecken.append([start, total])
-    return luecken
+    # Stillen mit winziger Lücke dazwischen (Rauschspitze) zusammenlegen
+    zusammen = []
+    for a, b in luecken:
+        if zusammen and a - zusammen[-1][1] < 0.1:
+            zusammen[-1][1] = b
+        else:
+            zusammen.append([a, b])
+    return zusammen
 
 
 def schreibe_json(pfad, daten):
