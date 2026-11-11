@@ -204,7 +204,7 @@ def titel_html(text, dauer_s):
     #root {{ position: absolute; inset: 0; }}
     #titel-box {{ position: absolute; left: 0; right: 0; top: 250px; text-align: center; padding: 0 80px; }}
     #titel-text {{ display: inline-block; font-family: Montserrat; font-weight: 900; font-size: 74px;
-                  line-height: 1.1; color: #111; background: {FARBE_BETONUNG}; padding: 18px 34px;
+                  line-height: 1.1; color: #2A2018; background: {FARBE_BETONUNG}; padding: 18px 34px;
                   border-radius: 22px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }}
   </style>
   <div id="root" data-composition-id="titel" data-width="1080" data-height="1920">
@@ -277,8 +277,12 @@ def main():
     ap.add_argument("--titel")
     ap.add_argument("--titel-dauer", type=float, default=2.6)
     ap.add_argument("--broll-plan")
+    ap.add_argument("--farbe", default=None, help="Farbe für Betonung und Hook-Box, z. B. #E9D8BE")
     ap.add_argument("--unten", type=int, default=640, help="Abstand Untertitel zum unteren Rand in px")
     a = ap.parse_args()
+    global FARBE_BETONUNG
+    if a.farbe:
+        FARBE_BETONUNG = a.farbe
 
     proj = Path(a.projekt)
     (proj / "compositions").mkdir(parents=True, exist_ok=True)

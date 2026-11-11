@@ -68,7 +68,7 @@ def hdr_transfer(pfad):
     return ""
 
 
-def filtergraph(stuecke, breite, hoehe, punch, fps, lufs, hdr, npl):
+def filtergraph(stuecke, breite, hoehe, punch, fps, lufs, hdr, npl, tempo=1.0):
     """Einmal dekodieren, HDR->SDR, auf 9:16 bringen, dann in Stücke teilen."""
     n = len(stuecke)
     p = max(punch, 1.0)
@@ -94,7 +94,12 @@ def filtergraph(stuecke, breite, hoehe, punch, fps, lufs, hdr, npl):
         zeilen.append(f"[r{i}]atrim=start={st['start']:.3f}:end={st['ende']:.3f},asetpts=PTS-STARTPTS,"
                       f"afade=t=in:d={f:.3f},afade=t=out:st={d - f:.3f}:d={f:.3f}[a{i}]")
         va.append(f"[v{i}][a{i}]")
-    zeilen.append("".join(va) + f"concat=n={n}:v=1:a=1[vc][ac]")
+    if tempo != 1.0:  # schneller, Stimme bleibt in der Tonhöhe (atempo)
+        zeilen.append("".join(va) + f"concat=n={n}:v=1:a=1[vk][ak]")
+        zeilen.append(f"[vk]setpts=PTS/{tempo},fps={fps}[vc]")
+        zeilen.append(f"[ak]atempo={tempo}[ac]")
+    else:
+        zeilen.append("".join(va) + f"concat=n={n}:v=1:a=1[vc][ac]")
     zeilen.append(f"[ac]loudnorm=I={lufs}:TP=-1.5:LRA=11,aresample=48000[ao]")
     return ";\n".join(zeilen)
 
@@ -111,6 +116,8 @@ def main():
     ap.add_argument("--hoehe", type=int, default=1920)
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--lufs", type=float, default=-14)
+    ap.add_argument("--tempo", type=float, default=1.0, help="Abspieltempo, z. B. 1.05")
+    ap.add_argument("--crf", type=int, default=15)
     ap.add_argument("--npl", type=float, default=100, help="HDR-Tonemapping: Helligkeit (höher = dunkler)")
     a = ap.parse_args()
 
@@ -131,11 +138,11 @@ def main():
     hdr = hdr_transfer(orig)
     if hdr:
         print(f"HDR erkannt ({hdr}) -> wird nach SDR (bt709) umgerechnet.")
-    graph.write_text(filtergraph(stuecke, a.breite, a.hoehe, a.punch, a.fps, a.lufs, hdr, a.npl),
+    graph.write_text(filtergraph(stuecke, a.breite, a.hoehe, a.punch, a.fps, a.lufs, hdr, a.npl, a.tempo),
                      encoding="utf-8")
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", orig,
            "-filter_complex_script", str(graph), "-map", "[vc]", "-map", "[ao]",
-           "-map_metadata", "-1", "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-g", str(a.fps), "-keyint_min", str(a.fps), "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+           "-map_metadata", "-1", "-c:v", "libx264", "-preset", "medium", "-crf", str(a.crf), "-g", str(a.fps), "-keyint_min", str(a.fps), "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
            "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(aus)]
     subprocess.run(cmd, check=True)
 
@@ -143,7 +150,7 @@ def main():
     t = 0.0
     for p in stuecke:
         p["ziel_start"] = round(t, 3)
-        t += p["ende"] - p["start"]
+        t += (p["ende"] - p["start"]) / a.tempo
         p["ziel_ende"] = round(t, 3)
 
     # Prüfung des fertigen Schnitts
@@ -151,7 +158,7 @@ def main():
     rest = [r for r in rest if r[0] > 0.05 and r[1] < dauer(str(aus)) - 0.05]
     neu = dauer(str(aus))
     bericht = {"original": orig, "original_dauer": round(total, 2), "schnitt_dauer": round(neu, 2),
-               "schnitte": len(stuecke) - 1, "pause_ziel": a.pause, "stuecke": stuecke,
+               "schnitte": len(stuecke) - 1, "pause_ziel": a.pause, "tempo": a.tempo, "stuecke": stuecke,
                "restpausen": rest}
     schreibe_json(str(aus.with_suffix(".json")), bericht)
     print(f"Original {total:.1f}s → Schnitt {neu:.1f}s ({len(stuecke) - 1} Schnitte, "
