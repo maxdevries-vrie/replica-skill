@@ -10,9 +10,9 @@ Wir sind ein Video-Schnitt-Team. Rohaufnahme + Skript rein, fertig geschnittenes
 | Videoart | Gesicht in die Kamera (Talking Head / Face-Cam) |
 | Plattform & Format | TikTok und Instagram Reels, **9:16 Hochformat, 1080×1920, 30 fps** |
 | Sprechweise | **Nach Skript mit mehreren Takes, aber auch frei.** Liegt ein Skript bei → Skript-Modus (bester Take pro Satz). Fehlt es oder wird frei gesprochen → Frei-Modus (abgebrochene Anläufe und Wiederholungen erkennen). Gemischt ist erlaubt: freie Einschübe, die im Skript fehlen, nicht automatisch löschen, sondern dem Nutzer zeigen. |
-| Schnitt-Stil | **Schnell und knackig.** Pausen auf **0,15 s** kürzen, Versprecher, Füllwörter (äh, ähm …) und doppelte Anläufe raus. Jeder zweite Schnitt bekommt einen leichten Punch-in (108 %), damit Jump-Cuts gewollt wirken. Ton auf −14 LUFS. |
-| Untertitel | **Immer an.** **Kurze Zeilen mit 2–4 Wörtern (max. ~20 Zeichen), die als Ganzes erscheinen, nicht Wort für Wort.** Weiß, Montserrat 900, schwarze Kontur, etwa 640 px über dem unteren Rand (über der App-Oberfläche, nicht im Gesicht). Kurzer Pop beim Einblenden. Mit `*Sternchen*` markierte Skriptwörter werden gelb (#FFD60A) hervorgehoben. |
-| Grafik | Optional ein Hook-Titel oben in den ersten ~2,6 s (gelbe Box). Alles Lesbare bleibt im Bereich 168–1330 px (TikTok/Instagram-Oberfläche). B-Roll aus einem Ordner, den der Nutzer angibt, an passenden Stellen vollflächig einblenden (Bilder mit leichtem Zoom). |
+| Schnitt-Stil | **Schnell und knackig.** Pausen auf **0,10 s** kürzen (`--pause 0.10`), Tempo **1,05×** (`--tempo 1.05`, Tonhöhe bleibt), Versprecher, Füllwörter (äh, ähm …) und doppelte Anläufe raus. Jeder zweite Schnitt bekommt einen leichten Punch-in (108 %), damit Jump-Cuts gewollt wirken. Ton auf −14 LUFS. |
+| Untertitel | **Immer an.** **Kurze Zeilen mit 2–4 Wörtern (max. ~20 Zeichen), die als Ganzes erscheinen, nicht Wort für Wort.** Weiß, Montserrat 900, schwarze Kontur, **tief auf Brusthöhe: `--unten 400`** (tiefer verdeckt die TikTok/Instagram-Oberfläche), nie im Gesicht. Kurzer Pop beim Einblenden. Mit `*Sternchen*` markierte Skriptwörter werden **beige (#D8C09A, passend zum Kanzlei-Logo)** hervorgehoben (`--farbe "#D8C09A"`). Beträge (z. B. *300 €*) und Kommentar-Stichwörter immer betonen. |
+| Grafik | Hook-Titel oben in den ersten ~2,6 s: beige Box (#D8C09A), dunkelbraune Schrift, kurz und provokant (Beispiel: „Gehaltserhöhung? Nicht so!“). Dem Nutzer 3 Varianten vorschlagen, er entscheidet. Alles Lesbare bleibt im Bereich 168–1330 px (TikTok/Instagram-Oberfläche). B-Roll aus einem Ordner, den der Nutzer angibt, an passenden Stellen vollflächig einblenden (Bilder mit leichtem Zoom). |
 
 ## Unverhandelbar
 
@@ -37,15 +37,18 @@ werkzeuge/neues-video.sh <name> <rohaufnahme.mp4> [skript.txt] [broll-ordner]   
 werkzeuge/transkribieren.sh videos/<name>/roh/<datei> videos/<name>/arbeit/transcript.json
 python3 werkzeuge/takes.py videos/<name>/arbeit/transcript.json videos/<name>/arbeit/takes.json [--skript videos/<name>/skript.txt]
 # 2 Cutter
-python3 werkzeuge/schneiden.py videos/<name>/roh/<datei> videos/<name>/arbeit/takes.json videos/<name>/arbeit/schnitt.mp4
+python3 werkzeuge/schneiden.py videos/<name>/roh/<datei> videos/<name>/arbeit/takes.json videos/<name>/arbeit/schnitt.mp4 --pause 0.10 --tempo 1.05
 # 3 Untertitel & Grafik
 werkzeuge/transkribieren.sh videos/<name>/arbeit/schnitt.mp4 videos/<name>/arbeit/schnitt-transcript.json
 python3 werkzeuge/untertitel.py videos/<name>/arbeit/schnitt.mp4 videos/<name>/arbeit/schnitt-transcript.json videos/<name>/hf \
-  [--skript videos/<name>/skript.txt] [--titel "Hook"] [--broll-plan videos/<name>/arbeit/broll-plan.json]
+  --unten 400 --farbe "#D8C09A" [--skript videos/<name>/skript.txt] [--titel "Hook"] [--broll-plan videos/<name>/arbeit/broll-plan.json]
 werkzeuge/hf check "$PWD/videos/<name>/hf"
 werkzeuge/hf render "$PWD/videos/<name>/hf" --quality draft --output "$PWD/videos/<name>/vorschau/vorschau.mp4"
 # Nach OK des Nutzers:
 werkzeuge/hf render "$PWD/videos/<name>/hf" --quality delivery --output "$PWD/videos/<name>/export/<name>.mp4"
+# Upload-Version für TikTok/Instagram (kleiner, -14 LUFS) – diese Datei an den Nutzer schicken:
+ffmpeg -i export/<name>.mp4 -c:v libx264 -preset slow -crf 17 -maxrate 16M -bufsize 32M -pix_fmt yuv420p \
+  -af "loudnorm=I=-14:TP=-1.5:LRA=11" -c:a aac -b:a 192k -movflags +faststart export/<name>_social.mp4
 ```
 
 ## Technische Hinweise
@@ -56,6 +59,6 @@ werkzeuge/hf render "$PWD/videos/<name>/hf" --quality delivery --output "$PWD/vi
 - Mehrere Rohdateien: zuerst in Aufnahmereihenfolge zu `arbeit/roh-gesamt.mp4` zusammenfügen (neu encodieren) und damit weiterarbeiten. Die Originale bleiben unberührt.
 - Der Testclip unter `test/` ist die Referenz, ob die Kette funktioniert.
 - **iPhone-Aufnahmen sind HDR (HLG).** `schneiden.py` erkennt das und rechnet nach SDR um (`--npl 100` ist abgestimmt; höher = dunkler).
-- Untertitel-Höhe pro Video an das Gesicht anpassen: `untertitel.py --unten <px>` (Standard 640, bei IMG_6548 590–600, damit sie unter dem Kinn sitzen). Immer per Snapshot prüfen.
+- Untertitel-Höhe pro Video an das Gesicht anpassen: `untertitel.py --unten <px>` (Nutzer-Standard 400 = Brusthöhe). Immer per Snapshot prüfen.
 - Ohne Skript: aus dem Transkript ein bereinigtes `skript.txt` schreiben (Satzzeichen, „€“ statt „Euro“, Beträge und Schlüsselwörter in *Sternchen*). Unsichere Wörter mit `medium` gegenprüfen und dem Nutzer zeigen. Das Skript gilt dann als Wahrheit für den Untertiteltext.
 - Rohvideos aus Google Drive: Der Connector lädt nur bis 10 MB. Größere Dateien stellt der Nutzer kurz auf „Jeder mit dem Link“, dann `curl -L "https://drive.usercontent.google.com/download?id=<ID>&export=download&confirm=t"`. Danach daran erinnern, die Freigabe zurückzusetzen.
