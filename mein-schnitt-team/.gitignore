@@ -12,3 +12,4 @@ test/broll/
 *.jpg
 .hyperframes/
 renders/
+.download/

@@ -30,7 +30,7 @@ PAUSE_BRUCH = 0.15
 FARBE_BETONUNG = "#FFD60A"
 
 
-EINHEITEN = {"€", "%", "$", "Euro", "Prozent"}
+EINHEITEN = {"€", "%", "$", "Euro", "Prozent", "Cent"}
 
 
 def skript_woerter(text):

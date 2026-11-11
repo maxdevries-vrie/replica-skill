@@ -51,6 +51,25 @@ ffmpeg -i export/<name>.mp4 -c:v libx264 -preset slow -crf 17 -maxrate 16M -bufs
   -af "loudnorm=I=-14:TP=-1.5:LRA=11" -c:a aac -b:a 192k -movflags +faststart export/<name>_social.mp4
 ```
 
+## Stapelbetrieb (mehrere Videos auf einmal)
+
+```bash
+# 1) Laden + Transkript + Takes für alle (parallel):
+python3 werkzeuge/stapel.py img6558=drive:<ID> img6538=drive:<ID> --bis takes
+# 2) Pro Video: Transkript lesen, bereinigtes skript.txt schreiben, doppelte Formulierungen ggf. in
+#    arbeit/takes.json heraustrennen (Grenzen per silencedetect), 3 Hooks überlegen -> bester in titel.txt
+# 3) Schnitt + Untertitel + Vorschau für alle:
+python3 werkzeuge/stapel.py img6558 img6538 --ab schnitt --bis vorschau
+# 4) Feedback einarbeiten (z. B. nur Untertitel neu): --ab untertitel --bis vorschau
+# 5) Nach OK des Nutzers, nur für freigegebene Videos:
+python3 werkzeuge/stapel.py img6558 --ab export --bis export
+```
+
+- Quelle `drive:<ID>`: Datei-ID aus Google Drive (Drive-Connector `search_files`), Datei muss per Link freigegeben sein.
+- Abweichungen pro Video in `videos/<name>/einstellungen.json` (`unten`, `farbe`, `tempo`, `pause`, `modell`).
+- Protokoll pro Video: `videos/<name>/stapel.log`; Gesamtergebnis: `videos/stapel-ergebnis.json`.
+- Läuft länger als 10 Minuten: im Hintergrund starten.
+
 ## Technische Hinweise
 
 - HyperFrames-CLI immer über `werkzeuge/hf` aufrufen (nutzt die Plugin-Version, setzt den Proxy für Node). Projektpfade **absolut** übergeben, weil der Launcher aus dem Home-Ordner startet.
