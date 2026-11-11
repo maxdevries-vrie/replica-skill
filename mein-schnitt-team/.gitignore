@@ -1,0 +1,14 @@
+node_modules/
+.browsers/
+# Medien und Zwischenstände bleiben lokal
+videos/
+test/roh/
+test/arbeit/
+test/broll/
+*.mp4
+*.mov
+*.wav
+*.png
+*.jpg
+.hyperframes/
+renders/

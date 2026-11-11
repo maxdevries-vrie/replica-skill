@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# HyperFrames-CLI über den Launcher des installierten Plugins (gleiche Version wie die Skills).
+# Fällt auf npx zurück, wenn das Plugin nicht gefunden wird.
+export NODE_USE_ENV_PROXY=1
+export NODE_NO_WARNINGS=1
+L=$(ls -d "$HOME"/.claude/plugins/cache/hyperframes/hyperframes/*/skills/hyperframes/scripts/plugin-cli.mjs 2>/dev/null | sort -V | tail -1)
+if [ -n "$L" ]; then exec node "$L" "$@"; else exec npx hyperframes "$@"; fi
